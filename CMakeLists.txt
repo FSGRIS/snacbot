@@ -50,6 +50,7 @@ add_message_files(
 	FILES
 	Order.msg
 	Snack.msg
+	Location.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -191,5 +192,7 @@ include_directories(
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_executable(snacbot_main src/main.cpp)
-target_link_libraries(snacbot_main ${catkin_LIBRARIES})
+#add_executable(snacbot src/snacbot.cpp)
+add_executable(location_service src/location_service.cpp)
+#target_link_libraries(snacbot ${catkin_LIBRARIES})
+target_link_libraries(location_service ${catkin_LIBRARIES})
