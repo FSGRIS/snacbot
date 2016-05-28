@@ -31,16 +31,16 @@ class LocFileWriter {
 public:
 	mutex mu;
 	ros::NodeHandle nh;
-	ros::Subscriber point_sub;
 	ros::Publisher marker_pub;
-	fstream outfile;
-	vector<snacbot::Location> locs;
+	ros::Subscriber loc_sub;
+	ofstream outfile;
 	long next_id;
 	
 	LocFileWriter(string filename, bool append) {
-		ROS_INFO("in writer");
+		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+		next_id = 0;
 		if (append) {
-			locs = parse_locations(filename);
+			auto locs = parse_locations(filename);
 			// Place markers and set next_id to the max id of the parsed locations.
 			for (auto it = locs.begin(); it != locs.end(); it++) {
 				placeMarker(*it);
@@ -49,10 +49,11 @@ public:
 				}
 			}
 		}
+		// For write, next_id starts at 1. For append, next_id starts at 1 greater than
+		// the max id of parsed locations.
 		next_id++;
 		outfile.open(filename, append ? ofstream::app : ofstream::trunc);
-		point_sub = nh.subscribe("/clicked_point", 1, &LocFileWriter::pointHandler, this);
-		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+		loc_sub = nh.subscribe("clicked_point", 1, &LocFileWriter::locHandler, this);
 	}
 
 	void placeMarker(snacbot::Location l) {
@@ -71,27 +72,28 @@ public:
 		m.pose.orientation.y = 0.0;
 		m.pose.orientation.z = 0.0;
 		m.pose.orientation.w = 1.0;
-		m.scale.x = 0.1;
-		m.scale.y = 0.1;
-		m.scale.z = 0.1;
-		m.color.a = 1.0; // Don't forget to set the alpha!
+		m.scale.x = 1.1;
+		m.scale.y = 1.1;
+		m.scale.z = 1.1;
+		m.color.a = 1.0;
 		m.color.r = 0.8;
 		m.color.g = 0.2;
 		m.color.b = 0.1;
 		m.text = to_string(l.id);
 		marker_pub.publish(m);
+		ROS_INFO("[placeMarker] id %ld", l.id);
 	}
 
-	void pointHandler(const geometry_msgs::PointStamped msg) {
+	void locHandler(const geometry_msgs::PointStamped msg) {
+		ROS_INFO("[location service] new loc");
 		mu.lock();
-		ROS_INFO("point placed");
 		snacbot::Location l;
+		l.id = next_id;
 		l.x = msg.point.x;
 		l.y = msg.point.y;
-		l.id = next_id;
 		ROS_INFO("new location: %ld at (%ld, %ld)", l.id, l.x, l.y);
 		next_id++;
-		locs.push_back(l);
+		outfile << l.id << "\t" << l.x << "\t" << l.y << endl;
 		placeMarker(l);
 		mu.unlock();
 	}
@@ -119,8 +121,9 @@ int main(int argc, char **argv) {
 			usage();
 		}
 		LocFileWriter w(argv[2], append);
+		ros::spin();
 	} else {
-		ROS_INFO("?");
+		ROS_INFO("not implemented");
+		exit(1);
 	}
-	ros::spin();
 }
