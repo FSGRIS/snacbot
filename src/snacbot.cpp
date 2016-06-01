@@ -22,7 +22,7 @@ public:
 
 	Snacbot() {
 		order_sub = nh.subscribe("/snacbot/orders", 1000, &Snacbot::orderHandler, this);
-		ros::ServiceClient cli = nh.serviceClient<snacbot::GetLocations>("location_service");
+		ros::ServiceClient cli = nh.serviceClient<snacbot::GetLocations>("snacbot/locations");
 		snacbot::GetLocations srv;
 		if (cli.call(srv)) {
 			auto locs = srv.response.locs;
