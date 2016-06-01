@@ -53,12 +53,11 @@ add_message_files(
 	Location.msg
 )
 
-## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+# Generate services in the 'srv' folder
+add_service_files(
+	FILES
+	GetLocations.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -192,7 +191,7 @@ include_directories(
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-#add_executable(snacbot src/snacbot.cpp)
+add_executable(snacbot src/snacbot.cpp)
 add_executable(location_service src/location_service.cpp)
-#target_link_libraries(snacbot ${catkin_LIBRARIES})
+target_link_libraries(snacbot ${catkin_LIBRARIES})
 target_link_libraries(location_service ${catkin_LIBRARIES})

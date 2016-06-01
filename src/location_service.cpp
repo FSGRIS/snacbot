@@ -9,6 +9,7 @@
 #include <geometry_msgs/PointStamped.h>
 
 #include <snacbot/Location.h>
+#include <snacbot/GetLocations.h>
 
 using namespace std;
 
@@ -27,18 +28,16 @@ vector<snacbot::Location> parse_locations(string filename) {
 	return locs;
 }
 
-class LocFileWriter {
+class LocationFileWriter {
 public:
 	mutex mu;
 	ros::NodeHandle nh;
-	ros::Publisher marker_pub;
 	ros::Subscriber loc_sub;
+	ros::Publisher marker_pub;
 	ofstream outfile;
 	long next_id;
 	
-	LocFileWriter(string filename, bool append) {
-		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
-		next_id = 0;
+	LocationFileWriter(string filename, bool append) {
 		if (append) {
 			auto locs = parse_locations(filename);
 			// Place markers and set next_id to the max id of the parsed locations.
@@ -49,11 +48,10 @@ public:
 				}
 			}
 		}
-		// For write, next_id starts at 1. For append, next_id starts at 1 greater than
-		// the max id of parsed locations.
 		next_id++;
 		outfile.open(filename, append ? ofstream::app : ofstream::trunc);
-		loc_sub = nh.subscribe("clicked_point", 1, &LocFileWriter::locHandler, this);
+		loc_sub = nh.subscribe("clicked_point", 1, &LocationFileWriter::locHandler, this);
+		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
 	}
 
 	void placeMarker(snacbot::Location l) {
@@ -72,16 +70,15 @@ public:
 		m.pose.orientation.y = 0.0;
 		m.pose.orientation.z = 0.0;
 		m.pose.orientation.w = 1.0;
-		m.scale.x = 1.1;
-		m.scale.y = 1.1;
-		m.scale.z = 1.1;
+		m.scale.x = 0.1;
+		m.scale.y = 0.1;
+		m.scale.z = 0.1;
 		m.color.a = 1.0;
 		m.color.r = 0.8;
 		m.color.g = 0.2;
 		m.color.b = 0.1;
 		m.text = to_string(l.id);
 		marker_pub.publish(m);
-		ROS_INFO("[placeMarker] id %ld", l.id);
 	}
 
 	void locHandler(const geometry_msgs::PointStamped msg) {
@@ -93,9 +90,26 @@ public:
 		l.y = msg.point.y;
 		ROS_INFO("new location: %ld at (%ld, %ld)", l.id, l.x, l.y);
 		next_id++;
-		outfile << l.id << "\t" << l.x << "\t" << l.y << endl;
+		outfile << l.id << l.x << l.y << endl;
 		placeMarker(l);
 		mu.unlock();
+	}
+};
+
+class LocationService {
+public:
+	ros::NodeHandle nh;
+	ros::ServiceServer serv;
+	vector<snacbot::Location> locs;
+
+	LocationService(string filename) {
+		serv = nh.advertiseService("snacbot/locations", &LocationService::getLocations, this);
+		locs = parse_locations(filename);
+	}
+
+	bool getLocations(snacbot::GetLocations::Request &req, snacbot::GetLocations::Response &res) {
+		res.locs = locs;
+		return true;
 	}
 };
 
@@ -120,10 +134,10 @@ int main(int argc, char **argv) {
 			// No output file provided.
 			usage();
 		}
-		LocFileWriter w(argv[2], append);
+		LocationFileWriter w(argv[2], append);
 		ros::spin();
 	} else {
-		ROS_INFO("not implemented");
-		exit(1);
+		LocationService s(argv[1]);
+		ros::spin();
 	}
 }

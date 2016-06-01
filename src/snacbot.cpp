@@ -1,18 +1,39 @@
+#include <stdlib.h>
 #include <mutex>
 
 #include <ros/ros.h>
 #include <snacbot/Order.h>
+#include <snacbot/Location.h>
+#include <snacbot/GetLocations.h>
 
-class Bot {
+using namespace std;
+
+typedef struct {
+	long x;
+	long y;
+} Point;
+
+class Snacbot {
 public:
-	Bot() {
-		order_sub = nh.subscribe("/snacbot/orders", 1000, &Bot::orderHandler, this);
-	}
-
-private:
 	ros::NodeHandle nh;
 	ros::Subscriber order_sub;
-	std::mutex mu;
+	mutex mu;
+	map<long, Point> loc_map;
+
+	Snacbot() {
+		order_sub = nh.subscribe("/snacbot/orders", 1000, &Snacbot::orderHandler, this);
+		ros::ServiceClient cli = nh.serviceClient<snacbot::GetLocations>("location_service");
+		snacbot::GetLocations srv;
+		if (cli.call(srv)) {
+			auto locs = srv.response.locs;
+			for (auto it = locs.begin(); it != locs.end(); it++) {
+				Point p;
+				p.x = it->x;
+				p.y = it->y;
+				loc_map[it->id] = p;
+			}
+		}
+	}
 
 	void orderHandler(const snacbot::Order msg) {
 		mu.lock();
@@ -28,6 +49,6 @@ private:
 
 int main(int argc, char **argv) {
 	ros::init(argc, argv, "snacbot");
-	Bot bot;
+	Snacbot bot;
 	ros::spin();
 }
