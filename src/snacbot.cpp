@@ -9,8 +9,8 @@
 using namespace std;
 
 typedef struct {
-	long x;
-	long y;
+	double x;
+	double y;
 } Point;
 
 class Snacbot {

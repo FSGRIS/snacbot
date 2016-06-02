@@ -17,7 +17,8 @@ vector<snacbot::Location> parse_locations(string filename) {
 	ifstream infile;
 	infile.open(filename);
 	vector<snacbot::Location> locs;
-	long id, x, y;
+	long id;
+	double x, y;
 	while (infile >> id >> x >> y) {
 		snacbot::Location l;
 		l.id = id;
@@ -38,6 +39,19 @@ public:
 	long next_id;
 	
 	LocationFileWriter(string filename, bool append) {
+		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1000);
+		// Wait for subscribers to register before placing markers.
+		int n;
+		ros::Rate r(10);
+		while (ros::ok() && n < 50) {
+			// Note: do not run "rostopic echo visualization_marker" or this will not work!
+			if (marker_pub.getNumSubscribers() > 0) {
+				break;
+			}
+			n++;
+			r.sleep();
+		}
+		next_id = 0;
 		if (append) {
 			auto locs = parse_locations(filename);
 			// Place markers and set next_id to the max id of the parsed locations.
@@ -48,10 +62,21 @@ public:
 				}
 			}
 		}
-		next_id++;
+		next_id = 1;
 		outfile.open(filename, append ? ofstream::app : ofstream::trunc);
 		loc_sub = nh.subscribe("clicked_point", 1, &LocationFileWriter::locHandler, this);
-		marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+	}
+
+	void initLocations(string filename) {
+		auto locs = parse_locations(filename);
+		// Place markers and set next_id to the max id of the parsed locations.
+		for (auto it = locs.begin(); it != locs.end(); it++) {
+			placeMarker(*it);
+			if (it->id > next_id) {
+				next_id = it->id;
+			}
+		}
+		next_id++;
 	}
 
 	void placeMarker(snacbot::Location l) {
@@ -70,15 +95,17 @@ public:
 		m.pose.orientation.y = 0.0;
 		m.pose.orientation.z = 0.0;
 		m.pose.orientation.w = 1.0;
-		m.scale.x = 0.1;
-		m.scale.y = 0.1;
-		m.scale.z = 0.1;
+		m.scale.x = 0.2;
+		m.scale.y = 0.2;
+		m.scale.z = 0.2;
 		m.color.a = 1.0;
 		m.color.r = 0.8;
 		m.color.g = 0.2;
 		m.color.b = 0.1;
 		m.text = to_string(l.id);
 		marker_pub.publish(m);
+		ROS_INFO("published loc %ld at (%.2f, %.2f)", l.id, l.x, l.y);
+		ROS_INFO("marker info %d", marker_pub.getNumSubscribers());
 	}
 
 	void locHandler(const geometry_msgs::PointStamped msg) {
@@ -88,9 +115,9 @@ public:
 		l.id = next_id;
 		l.x = msg.point.x;
 		l.y = msg.point.y;
-		ROS_INFO("new location: %ld at (%ld, %ld)", l.id, l.x, l.y);
+		ROS_INFO("new location: %ld at (%.2f, %.2f)", l.id, l.x, l.y);
 		next_id++;
-		outfile << l.id << l.x << l.y << endl;
+		outfile << l.id << "\t" << l.x << "\t" << l.y << endl;
 		placeMarker(l);
 		mu.unlock();
 	}
