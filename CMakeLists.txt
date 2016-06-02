@@ -8,6 +8,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   message_generation
+  actionlib
+  move_base_msgs
 )
 
 set(CMAKE_CXX_FLAGS "-std=c++11")
@@ -49,7 +51,6 @@ set(CMAKE_CXX_FLAGS "-std=c++11")
 add_message_files(
 	FILES
 	Order.msg
-	Snack.msg
 	Location.msg
 )
 
@@ -57,6 +58,7 @@ add_message_files(
 add_service_files(
 	FILES
 	GetLocations.srv
+	OpenLids.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -193,5 +195,7 @@ include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(snacbot src/snacbot.cpp)
 add_executable(location_service src/location_service.cpp)
+add_executable(lid_service src/lid_service.cpp)
 target_link_libraries(snacbot ${catkin_LIBRARIES})
 target_link_libraries(location_service ${catkin_LIBRARIES})
+target_link_libraries(lid_service ${catkin_LIBRARIES})
