@@ -62,7 +62,7 @@ public:
 				}
 			}
 		}
-		next_id = 1;
+		next_id++;
 		outfile.open(filename, append ? ofstream::app : ofstream::trunc);
 		loc_sub = nh.subscribe("clicked_point", 1, &LocationFileWriter::locHandler, this);
 	}

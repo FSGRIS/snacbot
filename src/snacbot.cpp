@@ -39,6 +39,7 @@ public:
 			}
 		}
 		lid_client = nh.serviceClient<snacbot::OpenLids>("snacbot/lids");
+		ROS_INFO("end of constructor");
 	}
 
 	void orderHandler(const snacbot::Order msg) {
@@ -48,7 +49,8 @@ public:
 		for (auto it = msg.snack_ids.begin(); it != msg.snack_ids.end(); it++) {
 			ROS_INFO("\tsnack_id: %ld", *it);
 		}
-		auto it = loc_map.find(msg.location_id);
+		openLids(msg.snack_ids);
+		/*auto it = loc_map.find(msg.location_id);
 		if (it == loc_map.end()) {
 			ROS_INFO("error: location %ld not found", msg.location_id);
 			return;
@@ -72,7 +74,7 @@ public:
 		} else {
 			ROS_INFO("move failed");
 			ROS_INFO("current state: %s", ac.getState().toString().c_str());
-		}
+		}*/
 		mu.unlock();
 	}
 

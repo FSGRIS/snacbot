@@ -6,6 +6,7 @@
 #include <errno.h>      // Error number definitions
 #include <termios.h>    // POSIX terminal control definitions
 #include <iostream>
+#include <mutex>
 
 #include <ros/ros.h>
 #include <std_msgs/String.h>
@@ -19,19 +20,23 @@ class LidService {
 public: 
 	ros::NodeHandle nh;
 	ros::ServiceServer serv;
-	int USB;
+	int usb;
+	mutex mu;
 
 	LidService() {
-		USB = open("/dev/ttyACM1", O_RDWR| O_NOCTTY);
-		if (USB < 0) {
-			cout << "Error, couldn't open USB /dev/ttyACM0, " << errno << endl;
+		const char *port = "/dev/ttyACM1";
+		usb = open(port, O_RDWR| O_NOCTTY);
+		if (usb < 0) {
+			cout << "Error, couldn't open USB " << port << " errno: " << errno << endl;
+			exit(1);
 		}
 		struct termios tty;
 		struct termios tty_old;
 		memset(&tty, 0, sizeof(tty));
 
-		if (tcgetattr(USB, &tty) != 0) {
+		if (tcgetattr(usb, &tty) != 0) {
 		   cout << "Error " << errno << " from tcgetattr: " << strerror(errno) << std::endl;
+		   exit(1);
 		}
 		tty_old = tty;
 		cfsetospeed(&tty, (speed_t)B9600);
@@ -50,40 +55,57 @@ public:
 		cfmakeraw(&tty);
 
 		/* Flush Port, then applies attributes */
-		tcflush( USB, TCIFLUSH );
-		if ( tcsetattr ( USB, TCSANOW, &tty ) != 0) {
+		tcflush( usb, TCIFLUSH );
+		if ( tcsetattr ( usb, TCSANOW, &tty ) != 0) {
 		   std::cout << "Error " << errno << " from tcsetattr" << std::endl;
+		   exit(1);
+		}
+		for (int i = 0; i < 4; i++) {
+			sendDegree(i, (i % 2 == 0) ? 0 : 180);
 		}
 		serv = nh.advertiseService("snacbot/lids", &LidService::openLids, this);		
 	}
 
 	bool openLids(snacbot::OpenLids::Request &req, snacbot::OpenLids::Response &res) {
+		mu.lock();
+		ROS_INFO("[openLids] opening...");
 		for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
 			sendDegree((int) *it, (*it % 2 == 0) ? 180 : 0);
 		}
 		// Sleep for 5 seconds.
 		usleep(1000 * 1000 * 5);
-		for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
-			sendDegree((int) *it, (*it % 2 == 0) ? 0 : 180);
+		//for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
+		//	sendDegree((int) *it, (*it % 2 == 0) ? 0 : 180);
+		//}
+		ROS_INFO("[openLids] closing...");
+		for (int i = 0; i < 4; i++) {
+			sendDegree(i, (i % 2 == 0) ? 0 : 180);
 		}
+		mu.unlock();
 		return true;
 	}
 
 	// message format should be "servoNum:degree:"
-	int sendDegree(int servoNum, int degree) {//int degree, int USB) {
-		ROS_INFO("Setting servo %d to %d...", servoNum, degree);
+	void sendDegree(int servoNum, int degree) {//int degree, int usb) {
+		ROS_INFO("[sendDegree] setting servo %d to %d...", servoNum, degree);
+
+		int buf[2] = {servoNum, degree};
+
 		int n_written = 0;
-
 		do {
-			n_written = write(USB, &servoNum, 1);
-			ROS_INFO("n_written: %d", n_written);
-		} while (n_written == 0);
+			n_written = write(usb, buf, 8);
+			if (n_written < 0) {
+				ROS_INFO("[sendDegree] failed to write buffer");
+				return;
+			}
+			ROS_INFO("[sendDegree] n_written: %d", n_written);
+		} while (n_written < 8);
 
-		do {
-		    n_written = write( USB, &degree, 1 );
-			ROS_INFO("n_written: %d", n_written);	    
-		} while (n_written == 0);
-		ROS_INFO("Sent");
+		/*do {
+		    n_written = write( usb, &degree, 1 );
+			ROS_INFO("[sendDegree] n_written: %d", n_written);	    
+		} while (n_written == 0);*/
+		ROS_INFO("[sendDegree] sent");
 	}
 };
 
