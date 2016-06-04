@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <actionlib/client/simple_action_client.h>
+#include <tf/transform_listener.h>
 
 #include <snacbot/Order.h>
 #include <snacbot/Location.h>
@@ -20,12 +21,23 @@ typedef struct {
 class Snacbot {
 public:
 	ros::NodeHandle nh;
+	Point home;
+
+	mutex orderMu;
 	ros::Subscriber order_sub;
 	ros::ServiceClient lid_client;
-	mutex mu;
 	map<long, Point> loc_map;
+	
+	mutex waitMu;
+	int numWaiting;
 
 	Snacbot() {
+		tf::TransformListener tl(nh);
+		tl.waitForTransform("map", "base_link", ros::Time(0), ros::Duration(5));
+		tf::StampedTransform t;
+		tl.lookupTransform("map", "base_link", ros::Time(0), t);
+		home.x = t.getOrigin().x();
+		home.y = t.getOrigin().y();
 		order_sub = nh.subscribe("/snacbot/orders", 1000, &Snacbot::orderHandler, this);
 		ros::ServiceClient cli = nh.serviceClient<snacbot::GetLocations>("snacbot/locations");
 		snacbot::GetLocations srv;
@@ -42,20 +54,7 @@ public:
 		ROS_INFO("end of constructor");
 	}
 
-	void orderHandler(const snacbot::Order msg) {
-		mu.lock();
-		ROS_INFO("new order!");
-		ROS_INFO("location_id: %ld", msg.location_id);
-		for (auto it = msg.snack_ids.begin(); it != msg.snack_ids.end(); it++) {
-			ROS_INFO("\tsnack_id: %ld", *it);
-		}
-		openLids(msg.snack_ids);
-		/*auto it = loc_map.find(msg.location_id);
-		if (it == loc_map.end()) {
-			ROS_INFO("error: location %ld not found", msg.location_id);
-			return;
-		}
-		Point p = it->second;
+	bool move(Point p) {
 		actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> ac("move_base", true);
 		while (!ac.waitForServer(ros::Duration(0.5))) {
 			ROS_INFO("waiting for move_base action server to come up");
@@ -70,12 +69,44 @@ public:
 		ac.waitForResult();
 		if (ac.getState() == actionlib::SimpleClientGoalState::SUCCEEDED) {
 			ROS_INFO("move succeeded");
-			openLids(msg.snack_ids);
+			return true;
+			// openLids(msg.snack_ids);
 		} else {
 			ROS_INFO("move failed");
 			ROS_INFO("current state: %s", ac.getState().toString().c_str());
-		}*/
-		mu.unlock();
+			return false;
+		}
+	}
+
+	void orderHandler(const snacbot::Order msg) {
+		waitMu.lock();
+		numWaiting++;
+		waitMu.unlock();
+
+		orderMu.lock();
+		ROS_INFO("new order!");
+		ROS_INFO("location_id: %ld", msg.location_id);
+		for (auto it = msg.snack_ids.begin(); it != msg.snack_ids.end(); it++) {
+			ROS_INFO("\tsnack_id: %ld", *it);
+		}
+		auto it = loc_map.find(msg.location_id);
+		if (it == loc_map.end()) {
+			ROS_INFO("error: location %ld not found", msg.location_id);
+			return;
+		}
+		Point dest = it->second;
+		// TODO: Retry move if failed.
+		if (move(dest)) {
+			openLids(msg.snack_ids);
+		}
+		orderMu.unlock();
+
+		waitMu.lock();
+		numWaiting--;
+		if (numWaiting == 0) {
+			move(home);
+		}
+		waitMu.unlock();
 	}
 
 	void openLids(vector<long> snack_ids) {

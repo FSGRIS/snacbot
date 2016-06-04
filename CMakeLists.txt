@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   actionlib
   move_base_msgs
+  tf
 )
 
 set(CMAKE_CXX_FLAGS "-std=c++11")

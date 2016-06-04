@@ -17,55 +17,50 @@
 
  */
 #include <Servo.h>
+#include <ros.h>
+#include <std_msgs/Int32MultiArray.h>
+#include <std_msgs/String.h>
 
 #define MAX_DEGREE 175 // max without weird jitter
 #define MIN_DEGREE 10   // min without weird jitter
 
-int degrees[4] = {0, 0, 0, 0};
-boolean received = false;  // whether the string is complete
-int servo0Pin = 10;
-int servo1Pin = 6;
-int servo2Pin = 11;
-int servo3Pin = 9;
+void lidEvent(const std_msgs::Int32MultiArray& servo_msg);
 
-Servo servo0;
-Servo servo1;
-Servo servo2;
-Servo servo3;
+Servo servos[4];
+int pins[4] = {10, 6, 11, 9};
+int buttonPin = 12;
 
-void setup() {
-  // initialize serial:
-  Serial.begin(9600);
+ros::NodeHandle nh;
+ros::Subscriber<std_msgs::Int32MultiArray> sub("snacbot/servo", &lidEvent );
+std_msgs::String msg;
+ros::Publisher pub("snacbot/done", &msg);
 
-  servo0.attach(servo0Pin);
-  servo0.write(MAX_DEGREE);
+void setup() {  
+  nh.initNode();
+  nh.subscribe(sub);
+  nh.advertise(pub);
 
-  servo1.attach(servo1Pin);
-  servo1.write(MIN_DEGREE);
+  pinMode(buttonPin, INPUT);
 
-  servo2.attach(servo2Pin);  
-  servo2.write(MAX_DEGREE);
-
-  servo3.attach(servo3Pin);  
-  servo3.write(MIN_DEGREE);
+  int i;
+  for (i = 0; i < 4; i++) {
+    servos[i].attach(pins[i]);
+    servos[i].write((i % 2 == 0) ? MAX_DEGREE : MIN_DEGREE);
+  }
 }
 
 void loop() {
-  // print the string when a newline arrives:
-  if (received) {
-  	servo0.write(degrees[0]);
-  	servo1.write(degrees[1]);
-  	servo2.write(degrees[2]);
-  	servo3.write(degrees[3]);	
-  
-  	received = false;
-  
-  	int i;
-  	for (i = 0; i < 4; i++) {
-  		//Serial.println(degrees[i]);
-  	}
-  	//Serial.println();
-  }
+    int buttonStatus = digitalRead(buttonPin);
+    if (buttonStatus == HIGH) {
+      int i;
+      for (i = 0; i < 4; i++) {
+        servos[i].write((i % 2 == 0)? MAX_DEGREE : MIN_DEGREE);  
+      }
+      msg.data = "done";
+      pub.publish(&msg);
+    }    
+    nh.spinOnce();
+    delay(1);
 }
 
 /*
@@ -74,26 +69,20 @@ void loop() {
  time loop() runs, so using delay inside loop can delay
  response.  Multiple bytes of data may be available.
  */
-void serialEvent() {
-  while (Serial.available()) {
-  	// get the new byte:
-    byte buf[8];
-
-    Serial.readBytes(buf, 8);
-    int servoNum = *((int *) buf);
-    degrees[servoNum] = *((int *)(buf + 4));
-    Serial.println(servoNum);
-    Serial.println(degrees[servoNum]);
-    Serial.println();
-  		
-  	if (degrees[servoNum] > MAX_DEGREE)
-  	  degrees[servoNum] = MAX_DEGREE;
+void lidEvent(const std_msgs::Int32MultiArray& servo_msg) {
+    Serial.println("Event received");
+    Serial.print("Servo num: ");
+    Serial.println(servo_msg.data[0]  );
+    Serial.print("Degree: ");
+    Serial.println(servo_msg.data[1]);
+    int servoNum = servo_msg.data[0];
+    int degree = servo_msg.data[1];
+  	if (degree > MAX_DEGREE)
+  	  degree = MAX_DEGREE;
   
-  	if (degrees[servoNum] < MIN_DEGREE)
-  	  degrees[servoNum] = MIN_DEGREE;		
-  
-  	received = true;
-  }
+  	if (degree < MIN_DEGREE)
+  	  degree = MIN_DEGREE;
+    servos[servoNum].write(degree);
 }
 
 
