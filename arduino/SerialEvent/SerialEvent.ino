@@ -23,10 +23,10 @@
 
 int degrees[4] = {0, 0, 0, 0};
 boolean received = false;  // whether the string is complete
-int servo0Pin = 9;
-int servo1Pin = 10;
+int servo0Pin = 10;
+int servo1Pin = 6;
 int servo2Pin = 11;
-int servo3Pin = 6;
+int servo3Pin = 9;
 
 Servo servo0;
 Servo servo1;
@@ -36,10 +36,18 @@ Servo servo3;
 void setup() {
   // initialize serial:
   Serial.begin(9600);
+
   servo0.attach(servo0Pin);
+  servo0.write(MAX_DEGREE);
+
   servo1.attach(servo1Pin);
+  servo1.write(MIN_DEGREE);
+
   servo2.attach(servo2Pin);  
+  servo2.write(MAX_DEGREE);
+
   servo3.attach(servo3Pin);  
+  servo3.write(MIN_DEGREE);
 }
 
 void loop() {

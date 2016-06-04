@@ -24,7 +24,7 @@ public:
 	mutex mu;
 
 	LidService() {
-		const char *port = "/dev/ttyACM1";
+		const char *port = "/dev/ttyACM0";
 		usb = open(port, O_RDWR| O_NOCTTY);
 		if (usb < 0) {
 			cout << "Error, couldn't open USB " << port << " errno: " << errno << endl;
