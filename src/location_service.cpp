@@ -132,6 +132,7 @@ public:
 	LocationService(string filename) {
 		serv = nh.advertiseService("snacbot/locations", &LocationService::getLocations, this);
 		locs = parse_locations(filename);
+		ROS_INFO("location service started");
 	}
 
 	bool getLocations(snacbot::GetLocations::Request &req, snacbot::GetLocations::Response &res) {

@@ -59,7 +59,7 @@ add_message_files(
 add_service_files(
 	FILES
 	GetLocations.srv
-	OpenLids.srv
+	SetLids.srv
 )
 
 ## Generate actions in the 'action' folder

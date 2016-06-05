@@ -9,41 +9,37 @@
 #include <mutex>
 
 #include <ros/ros.h>
-#include <std_msgs/String.h>
 #include <std_msgs/Int32MultiArray.h>
 
-#include <snacbot/OpenLids.h>
+#include <snacbot/SetLids.h>
 
 using namespace std;
-
 
 class LidService {
 public: 
 	ros::NodeHandle nh;
 	ros::ServiceServer serv;
 	ros::Publisher servo_pub;
-	int usb;
 	mutex mu;
 
 	LidService() {
 		servo_pub = nh.advertise<std_msgs::Int32MultiArray>("snacbot/servo", 1000);
-		serv = nh.advertiseService("snacbot/lids", &LidService::openLids, this);		
+		serv = nh.advertiseService("snacbot/lids", &LidService::setLids, this);		
+		ROS_INFO("lid service started");
 	}
 
-	bool openLids(snacbot::OpenLids::Request &req, snacbot::OpenLids::Response &res) {
+	bool setLids(snacbot::SetLids::Request &req, snacbot::SetLids::Response &res) {
 		mu.lock();
-		ROS_INFO("[openLids] opening...");
-		for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
-			sendDegree((int) *it, (*it % 2 == 0) ? 90 : 90);
-		}
-		// Sleep for 5 seconds.
-		usleep(1000 * 1000 * 5);
-		//for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
-		//	sendDegree((int) *it, (*it % 2 == 0) ? 0 : 180);
-		//}
-		ROS_INFO("[openLids] closing...");
-		for (int i = 0; i < 4; i++) {
-			sendDegree(i, (i % 2 == 0) ? 180 : 0);
+		ROS_INFO("[setLids] opening...");
+		if (req.open) {
+			for (auto it = req.snack_ids.begin(); it != req.snack_ids.end(); it++) {
+				int i = (int) *it;
+				sendDegree(i, 90);
+			}
+		} else {
+			for (int i = 0; i < 4; i++) {
+				sendDegree(i, (i % 2 == 0) ? 180 : 0);
+			}
 		}
 		mu.unlock();
 		return true;
@@ -60,11 +56,8 @@ public:
 };
 
 int main(int argc, char** argv) {
-
 	ros::init(argc, argv, "lid_service");
 	LidService s;
 	ros::spin();
-
-	return 0;
 }
 

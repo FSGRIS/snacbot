@@ -1,15 +1,17 @@
 #include <stdlib.h>
 #include <mutex>
+#include <atomic>
 
 #include <ros/ros.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <actionlib/client/simple_action_client.h>
 #include <tf/transform_listener.h>
+#include <std_msgs/String.h>
 
 #include <snacbot/Order.h>
 #include <snacbot/Location.h>
 #include <snacbot/GetLocations.h>
-#include <snacbot/OpenLids.h>
+#include <snacbot/SetLids.h>
 
 using namespace std;
 
@@ -23,13 +25,16 @@ public:
 	ros::NodeHandle nh;
 	Point home;
 
-	mutex orderMu;
+	atomic<bool> handlingOrder;
 	ros::Subscriber order_sub;
 	ros::ServiceClient lid_client;
 	map<long, Point> loc_map;
+	ros::Subscriber done_sub;
 	
 	mutex waitMu;
 	int numWaiting;
+
+	bool servingSnacks;
 
 	Snacbot() {
 		tf::TransformListener tl(nh);
@@ -38,7 +43,8 @@ public:
 		tl.lookupTransform("map", "base_link", ros::Time(0), t);
 		home.x = t.getOrigin().x();
 		home.y = t.getOrigin().y();
-		order_sub = nh.subscribe("/snacbot/orders", 1000, &Snacbot::orderHandler, this);
+		order_sub = nh.subscribe("snacbot/orders", 1000, &Snacbot::orderHandler, this);
+		done_sub = nh.subscribe("snacbot/done", 1, &Snacbot::doneHandler, this);
 		ros::ServiceClient cli = nh.serviceClient<snacbot::GetLocations>("snacbot/locations");
 		snacbot::GetLocations srv;
 		if (cli.call(srv)) {
@@ -50,8 +56,10 @@ public:
 				loc_map[it->id] = p;
 			}
 		}
-		lid_client = nh.serviceClient<snacbot::OpenLids>("snacbot/lids");
-		ROS_INFO("end of constructor");
+		lid_client = nh.serviceClient<snacbot::SetLids>("snacbot/lids");
+		servingSnacks = false;
+		handlingOrder = false;
+		ROS_INFO("snacbot started");
 	}
 
 	bool move(Point p) {
@@ -70,7 +78,6 @@ public:
 		if (ac.getState() == actionlib::SimpleClientGoalState::SUCCEEDED) {
 			ROS_INFO("move succeeded");
 			return true;
-			// openLids(msg.snack_ids);
 		} else {
 			ROS_INFO("move failed");
 			ROS_INFO("current state: %s", ac.getState().toString().c_str());
@@ -79,12 +86,19 @@ public:
 	}
 
 	void orderHandler(const snacbot::Order msg) {
+		ROS_INFO("new order (waiting)");
 		waitMu.lock();
 		numWaiting++;
 		waitMu.unlock();
 
-		orderMu.lock();
-		ROS_INFO("new order!");
+		ros::Rate r(1);
+		while (handlingOrder) {
+			ros::spinOnce();
+			r.sleep();
+		}
+		handlingOrder = true;
+
+		ROS_INFO("serving order");
 		ROS_INFO("location_id: %ld", msg.location_id);
 		for (auto it = msg.snack_ids.begin(); it != msg.snack_ids.end(); it++) {
 			ROS_INFO("\tsnack_id: %ld", *it);
@@ -95,11 +109,21 @@ public:
 			return;
 		}
 		Point dest = it->second;
-		// TODO: Retry move if failed.
-		if (move(dest)) {
-			openLids(msg.snack_ids);
+		while (!move(dest)) {
+			ROS_INFO("move failed");
 		}
-		orderMu.unlock();
+		ROS_INFO("opening lids");
+		servingSnacks = true;
+		openLids(msg.snack_ids);
+	}
+
+	void doneHandler(const std_msgs::String &msg) {
+		ROS_INFO("done clicked");
+		if (!servingSnacks) {
+			return;
+		}
+		closeLids();
+		servingSnacks = false;
 
 		waitMu.lock();
 		numWaiting--;
@@ -107,17 +131,28 @@ public:
 			move(home);
 		}
 		waitMu.unlock();
+	
+		handlingOrder = false;
+	}
+
+	void closeLids() {
+		snacbot::SetLids srv;
+		srv.request.open = false;
+		if (lid_client.call(srv)) {
+			ROS_INFO("lids successfully closed");
+		} else {
+			ROS_INFO("error closing lids");
+		}
 	}
 
 	void openLids(vector<long> snack_ids) {
-		snacbot::OpenLids srv;
+		snacbot::SetLids srv;
+		srv.request.open = true;
 		srv.request.snack_ids = snack_ids;
 		if (lid_client.call(srv)) {
-			// Success!
-			ROS_INFO("lids successfully set");
+			ROS_INFO("lids successfully opened");
 		} else {
-			// Failure.
-			ROS_INFO("error setting lids");
+			ROS_INFO("error opening lids");
 		}
 	}
 };
