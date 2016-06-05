@@ -1,0 +1,12 @@
+<launch>
+	<machine name="turtlebot" address="leatherback" user="turtlebot" password="motion6" />
+	<include file="$(find turtlebot_bringup)/launch/minimal.launch" machine="turtlebot" />
+	<include file="$(find turtlebot_navigation)/launch/amcl_demo.launch" machine="turtlebot">
+		<arg name="map_file" value="/home/turtlebot/snacbot/my_map.yaml" />
+	</include>
+	<node name="websocket" pkg="rosbridge_server" type="rosbridge_websocket" />
+	<include file="$(find turtlebot_rviz_launchers)/launch/view_navigation.launch" />
+	<node name="location_service" pkg="snacbot" type="location_service" args="/home/cse/catkin_ws/locfile.txt" />
+	<node name="lid_service" pkg="snacbot" type="lid_service" />
+	<node name="snacbot" pkg="snacbot" type="snacbot" />
+</launch>
